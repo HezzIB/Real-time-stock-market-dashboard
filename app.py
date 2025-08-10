@@ -46,10 +46,6 @@ st.markdown("""
 # Header
 st.markdown('<h1 class="main-header">📈 Real-Time Stock Market Dashboard</h1>', unsafe_allow_html=True)
 
-# API Notice
-if not use_sample_data:
-    st.warning("⚠️ **API Notice**: Yahoo Finance API is currently experiencing issues. For the best experience, enable 'Use Sample Data' in the sidebar.")
-
 # Sidebar for stock selection
 st.sidebar.header("📊 Stock Selection")
 st.sidebar.markdown("---")
@@ -99,6 +95,7 @@ if use_sample_data:
     st.sidebar.success("📊 Using sample data - all features will work!")
 else:
     st.sidebar.warning("⚠️ Real data may not work due to API issues")
+    st.warning("⚠️ **API Notice**: Yahoo Finance API is currently experiencing issues. For the best experience, enable 'Use Sample Data' in the sidebar.")
 
 # Rate limiting warning
 st.sidebar.markdown("---")
