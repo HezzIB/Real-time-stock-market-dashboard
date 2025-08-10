@@ -15,7 +15,8 @@ def check_dependencies():
         'pandas',
         'plotly',
         'yfinance',
-        'requests'
+        'requests',
+        'jinja2'
     ]
     
     missing_packages = []

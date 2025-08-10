@@ -759,16 +759,24 @@ if selected_stocks:
         if portfolio_data:
             df_portfolio = pd.DataFrame(portfolio_data)
             
-            # Display portfolio table
-            st.dataframe(
-                df_portfolio.style.format({
-                    'Price': '${:.2f}',
-                    'Change': '${:.2f}',
-                    'Change %': '{:.2f}%',
-                    'Volume': '{:,.0f}'
-                }).background_gradient(subset=['Change %'], cmap='RdYlGn'),
-                use_container_width=True
-            )
+            # Display portfolio table with fallback for styling
+            try:
+                st.dataframe(
+                    df_portfolio.style.format({
+                        'Price': '${:.2f}',
+                        'Change': '${:.2f}',
+                        'Change %': '{:.2f}%',
+                        'Volume': '{:,.0f}'
+                    }).background_gradient(subset=['Change %'], cmap='RdYlGn'),
+                    use_container_width=True
+                )
+            except ImportError:
+                # Fallback without styling if jinja2 is not available
+                st.dataframe(
+                    df_portfolio.round(2),
+                    use_container_width=True
+                )
+                st.info("💡 For better formatting, ensure jinja2>=3.1.2 is installed")
             
             # Portfolio performance chart
             st.subheader("Portfolio Performance")
