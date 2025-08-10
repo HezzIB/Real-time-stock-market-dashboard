@@ -75,7 +75,7 @@ popular_stocks = {
 selected_stocks = st.sidebar.multiselect(
     "Select stocks to track:",
     options=list(popular_stocks.keys()),
-    default=["AAPL", "GOOGL", "MSFT"],
+    default=["AAPL", "MSFT"],  # Reduced default selection to avoid rate limiting
     format_func=lambda x: f"{x} - {popular_stocks[x]}"
 )
 
@@ -88,6 +88,10 @@ time_period = st.sidebar.selectbox(
 
 # Auto-refresh toggle
 auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (30s)", value=True)
+
+# Rate limiting warning
+st.sidebar.markdown("---")
+st.sidebar.warning("⚠️ **Rate Limiting Notice**\n\nTo avoid API limits, please:\n• Select fewer stocks (max 3-4)\n• Use longer refresh intervals\n• Be patient with data loading")
 
 # Function to get stock symbol with proper exchange suffix
 def get_stock_symbol(symbol):
@@ -121,13 +125,13 @@ def validate_indian_stock(symbol):
     return symbol
 
 # Function to get stock data with improved error handling
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=120)  # Increased cache time to reduce API calls
 def get_stock_data(symbol, period="1mo"):
-    """Fetch stock data using yfinance with retry logic"""
+    """Fetch stock data using yfinance with retry logic and rate limiting"""
     import time
     
-    max_retries = 3
-    retry_delay = 2
+    max_retries = 2  # Reduced retries to avoid rate limiting
+    retry_delay = 5  # Increased initial delay
     
     for attempt in range(max_retries):
         try:
@@ -136,17 +140,11 @@ def get_stock_data(symbol, period="1mo"):
             proper_symbol = get_stock_symbol(validated_symbol)
             stock = yf.Ticker(proper_symbol)
             
-            # Add a small delay to avoid rate limiting
-            time.sleep(1.0)  # Increased delay for better reliability
+            # Add a longer delay to avoid rate limiting
+            time.sleep(2.0)  # Increased delay for better reliability
             
-            # Fetch historical data
+            # Fetch historical data only (skip info to reduce API calls)
             hist = stock.history(period=period)
-            
-            # Add delay before fetching info
-            time.sleep(1.0)
-            
-            # Fetch stock info
-            info = stock.info
             
             # Validate data
             if hist is None or hist.empty:
@@ -154,12 +152,16 @@ def get_stock_data(symbol, period="1mo"):
                     st.warning(f"No data available for {symbol}. Indian markets might be closed or symbol may be incorrect.")
                 else:
                     st.warning(f"No data available for {symbol}. Please check the symbol.")
-                return None, None
+                return hist, {}
             
-            return hist, info
+            # Return minimal info to reduce API calls
+            return hist, {}
             
         except Exception as e:
-            if attempt < max_retries - 1:
+            if "429" in str(e):
+                st.warning(f"Rate limit hit for {symbol}. Waiting longer before retry...")
+                time.sleep(10)  # Wait 10 seconds for rate limit
+            elif attempt < max_retries - 1:
                 st.warning(f"Attempt {attempt + 1} failed for {symbol}. Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
                 retry_delay *= 2  # Exponential backoff
@@ -307,8 +309,9 @@ def create_stock_chart(df, symbol, stock_info):
     fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
     
     # Update layout
+    company_name = popular_stocks.get(symbol, symbol)
     fig.update_layout(
-        title=f"{symbol} - {stock_info.get('longName', symbol)}",
+        title=f"{symbol} - {company_name}",
         xaxis_rangeslider_visible=False,
         height=800,
         showlegend=True,
@@ -327,6 +330,10 @@ def create_metrics_cards(stock_data, stock_info, symbol):
     previous_price = stock_data['Close'].iloc[-2] if len(stock_data) > 1 else current_price
     price_change = current_price - previous_price
     price_change_pct = (price_change / previous_price) * 100 if previous_price != 0 else 0
+    
+    # Calculate 52-week high/low from available data
+    high_52w = stock_data['High'].max() if len(stock_data) > 0 else current_price
+    low_52w = stock_data['Low'].min() if len(stock_data) > 0 else current_price
     
     # Create columns for metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -348,7 +355,6 @@ def create_metrics_cards(stock_data, stock_info, symbol):
         )
     
     with col3:
-        high_52w = stock_info.get('fiftyTwoWeekHigh', 0)
         st.metric(
             label="52W High",
             value=f"${high_52w:.2f}",
@@ -356,7 +362,6 @@ def create_metrics_cards(stock_data, stock_info, symbol):
         )
     
     with col4:
-        low_52w = stock_info.get('fiftyTwoWeekLow', 0)
         st.metric(
             label="52W Low",
             value=f"${low_52w:.2f}",
