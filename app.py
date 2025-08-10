@@ -89,6 +89,11 @@ time_period = st.sidebar.selectbox(
 # Auto-refresh toggle
 auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (30s)", value=True)
 
+# Sample data toggle for testing
+use_sample_data = st.sidebar.checkbox("🧪 Use Sample Data (for testing)", value=False)
+if use_sample_data:
+    st.sidebar.info("📊 Using sample data for demonstration purposes")
+
 # Rate limiting warning
 st.sidebar.markdown("---")
 st.sidebar.warning("⚠️ **Rate Limiting Notice**\n\nTo avoid API limits, please:\n• Select fewer stocks (max 3-4)\n• Use longer refresh intervals\n• Be patient with data loading")
@@ -97,14 +102,28 @@ st.sidebar.warning("⚠️ **Rate Limiting Notice**\n\nTo avoid API limits, plea
 if st.sidebar.button("🔍 Test API Connection"):
     with st.sidebar.spinner("Testing connection..."):
         try:
+            # Test with multiple methods
             test_stock = yf.Ticker("AAPL")
-            test_data = test_stock.history(period="1d")
+            
+            # Method 1: Date range
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=5)
+            test_data = test_stock.history(start=start_date, end=end_date)
+            
             if test_data is not None and not test_data.empty:
                 st.sidebar.success("✅ API connection working!")
+                st.sidebar.info(f"Latest AAPL price: ${test_data['Close'].iloc[-1]:.2f}")
             else:
-                st.sidebar.error("❌ API connection failed - no data received")
+                # Method 2: Period
+                test_data = test_stock.history(period="5d")
+                if test_data is not None and not test_data.empty:
+                    st.sidebar.success("✅ API connection working (period method)!")
+                    st.sidebar.info(f"Latest AAPL price: ${test_data['Close'].iloc[-1]:.2f}")
+                else:
+                    st.sidebar.error("❌ API connection failed - no data received")
         except Exception as e:
             st.sidebar.error(f"❌ API connection failed: {str(e)}")
+            st.sidebar.info("💡 Try refreshing the page or check your internet connection")
 
 # Function to get stock symbol with proper exchange suffix
 def get_stock_symbol(symbol):
@@ -150,14 +169,53 @@ def test_stock_symbol(symbol):
     except Exception as e:
         return False, f"Error: {str(e)}"
 
+# Function to create sample data for testing
+def create_sample_data(symbol):
+    """Create sample data for testing when API fails"""
+    import pandas as pd
+    from datetime import datetime, timedelta
+    
+    # Create sample data for the last 30 days
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=30)
+    dates = pd.date_range(start=start_date, end=end_date, freq='D')
+    
+    # Generate sample price data
+    base_price = 150.0 if symbol == "AAPL" else 100.0
+    prices = []
+    for i in range(len(dates)):
+        # Add some random variation
+        import random
+        variation = random.uniform(-5, 5)
+        price = base_price + variation + (i * 0.1)  # Slight upward trend
+        prices.append(max(price, 1.0))  # Ensure price is positive
+    
+    # Create DataFrame
+    data = {
+        'Open': [p - random.uniform(1, 3) for p in prices],
+        'High': [p + random.uniform(1, 3) for p in prices],
+        'Low': [p - random.uniform(1, 3) for p in prices],
+        'Close': prices,
+        'Volume': [random.randint(1000000, 5000000) for _ in prices]
+    }
+    
+    df = pd.DataFrame(data, index=dates)
+    return df
+
 # Function to get stock data with improved error handling
 @st.cache_data(ttl=300)  # Increased cache time to reduce API calls
 def get_stock_data(symbol, period="1mo"):
     """Fetch stock data using yfinance with retry logic and rate limiting"""
     import time
+    from datetime import datetime, timedelta
     
-    max_retries = 3  # Increased retries
-    retry_delay = 3  # Reduced initial delay
+    # Check if sample data is requested
+    if use_sample_data:
+        st.info(f"📊 Using sample data for {symbol}")
+        return create_sample_data(symbol), {}
+    
+    max_retries = 2  # Reduced retries
+    retry_delay = 5  # Increased delay
     
     for attempt in range(max_retries):
         try:
@@ -168,30 +226,50 @@ def get_stock_data(symbol, period="1mo"):
             # Create ticker object
             stock = yf.Ticker(proper_symbol)
             
-            # Add a small delay to avoid rate limiting
-            time.sleep(1.0)
+            # Add a delay to avoid rate limiting
+            time.sleep(2.0)
             
-            # Try different periods if the requested period fails
-            periods_to_try = [period, "5d", "1mo", "3mo"]
-            
+            # Try different approaches to get data
             hist = None
-            for try_period in periods_to_try:
+            
+            # Method 1: Try with start and end dates
+            try:
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=30)
+                hist = stock.history(start=start_date, end=end_date)
+                if hist is not None and not hist.empty:
+                    st.success(f"✅ Successfully fetched data for {symbol} using date range method")
+            except Exception as e:
+                st.warning(f"Date range method failed for {symbol}: {str(e)}")
+            
+            # Method 2: Try with period if Method 1 failed
+            if hist is None or hist.empty:
                 try:
-                    hist = stock.history(period=try_period)
+                    hist = stock.history(period="1mo")
                     if hist is not None and not hist.empty:
-                        break
-                except:
-                    continue
+                        st.success(f"✅ Successfully fetched data for {symbol} using period method")
+                except Exception as e:
+                    st.warning(f"Period method failed for {symbol}: {str(e)}")
+            
+            # Method 3: Try with shorter period if Method 2 failed
+            if hist is None or hist.empty:
+                try:
+                    hist = stock.history(period="5d")
+                    if hist is not None and not hist.empty:
+                        st.success(f"✅ Successfully fetched data for {symbol} using 5-day method")
+                except Exception as e:
+                    st.warning(f"5-day method failed for {symbol}: {str(e)}")
             
             # Validate data
             if hist is None or hist.empty:
                 if attempt < max_retries - 1:
-                    st.warning(f"Attempt {attempt + 1}: No data for {symbol}. Retrying...")
+                    st.warning(f"Attempt {attempt + 1}: No data for {symbol}. Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
                     retry_delay *= 2
                     continue
                 else:
-                    st.error(f"No data available for {symbol} after trying multiple periods.")
+                    st.error(f"No data available for {symbol} after trying multiple methods.")
+                    st.info("💡 Try enabling 'Use Sample Data' for testing")
                     return None, {}
             
             # Return data
@@ -199,14 +277,15 @@ def get_stock_data(symbol, period="1mo"):
             
         except Exception as e:
             if "429" in str(e):
-                st.warning(f"Rate limit hit for {symbol}. Waiting 15 seconds...")
-                time.sleep(15)
+                st.warning(f"Rate limit hit for {symbol}. Waiting 20 seconds...")
+                time.sleep(20)
             elif attempt < max_retries - 1:
                 st.warning(f"Attempt {attempt + 1} failed for {symbol}. Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
                 retry_delay *= 2
             else:
                 st.error(f"Failed to fetch data for {symbol}: {str(e)}")
+                st.info("💡 Try enabling 'Use Sample Data' for testing")
                 return None, None
     
     return None, None
