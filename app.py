@@ -16,32 +16,190 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
-    }
-    .positive-change {
-        color: #00ff00;
-        font-weight: bold;
-    }
-    .negative-change {
-        color: #ff0000;
-        font-weight: bold;
-    }
-</style>
+# Theme selection with more options
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎨 Theme Settings")
+
+theme_mode = st.sidebar.selectbox(
+    "Choose Theme",
+    ["Light", "Dark", "Sepia", "Ocean Blue", "Forest Green", "Sunset Orange", "Purple Night"],
+    index=0
+)
+
+# Theme preview
+theme_colors = {
+    "Light": {"primary": "#1f77b4", "bg": "#ffffff", "text": "#000000"},
+    "Dark": {"primary": "#4CAF50", "bg": "#1a202c", "text": "#ffffff"},
+    "Sepia": {"primary": "#8B4513", "bg": "#faf8f3", "text": "#3e2723"},
+    "Ocean Blue": {"primary": "#0066cc", "bg": "#e6f3ff", "text": "#003366"},
+    "Forest Green": {"primary": "#2d5016", "bg": "#f0f8f0", "text": "#1a3310"},
+    "Sunset Orange": {"primary": "#ff6b35", "bg": "#fff5f0", "text": "#8b4513"},
+    "Purple Night": {"primary": "#9c27b0", "bg": "#f3e5f5", "text": "#4a148c"}
+}
+
+# Show theme preview
+selected_color = theme_colors[theme_mode]
+st.sidebar.markdown(f"""
+<div style="
+    background-color: {selected_color['bg']}; 
+    color: {selected_color['text']}; 
+    padding: 10px; 
+    border-radius: 5px; 
+    border-left: 4px solid {selected_color['primary']};
+    margin: 10px 0;
+">
+    <strong>🎨 {theme_mode} Theme</strong><br>
+    <small>Primary: {selected_color['primary']}</small>
+</div>
 """, unsafe_allow_html=True)
+
+# Theme information
+with st.sidebar.expander("ℹ️ Theme Information"):
+    st.markdown("""
+    **Available Themes:**
+    - **Light**: Classic blue theme
+    - **Dark**: Green accents on dark background
+    - **Sepia**: Warm brown tones
+    - **Ocean Blue**: Cool blue palette
+    - **Forest Green**: Natural green theme
+    - **Sunset Orange**: Warm orange tones
+    - **Purple Night**: Elegant purple theme
+    
+    *Charts will automatically adapt to your selected theme!*
+    """)
+
+# Custom CSS for different themes
+def get_theme_css(theme):
+    themes = {
+        "Light": {
+            "header_color": "#1f77b4",
+            "bg_color": "#ffffff",
+            "text_color": "#000000",
+            "sidebar_bg": "#f0f2f6",
+            "card_bg": "#f0f2f6",
+            "positive_color": "#00ff00",
+            "negative_color": "#ff0000",
+            "tab_bg": "#f0f2f6",
+            "tab_selected": "#1f77b4"
+        },
+        "Dark": {
+            "header_color": "#4CAF50",
+            "bg_color": "#1a202c",
+            "text_color": "#ffffff",
+            "sidebar_bg": "#2d3748",
+            "card_bg": "#2d3748",
+            "positive_color": "#4CAF50",
+            "negative_color": "#f56565",
+            "tab_bg": "#4a5568",
+            "tab_selected": "#4CAF50"
+        },
+        "Sepia": {
+            "header_color": "#8B4513",
+            "bg_color": "#faf8f3",
+            "text_color": "#3e2723",
+            "sidebar_bg": "#f5f1e8",
+            "card_bg": "#f5f1e8",
+            "positive_color": "#2e7d32",
+            "negative_color": "#c62828",
+            "tab_bg": "#e8dcc0",
+            "tab_selected": "#8B4513"
+        },
+        "Ocean Blue": {
+            "header_color": "#0066cc",
+            "bg_color": "#e6f3ff",
+            "text_color": "#003366",
+            "sidebar_bg": "#cce7ff",
+            "card_bg": "#cce7ff",
+            "positive_color": "#0066cc",
+            "negative_color": "#cc0000",
+            "tab_bg": "#b3d9ff",
+            "tab_selected": "#0066cc"
+        },
+        "Forest Green": {
+            "header_color": "#2d5016",
+            "bg_color": "#f0f8f0",
+            "text_color": "#1a3310",
+            "sidebar_bg": "#e0f0e0",
+            "card_bg": "#e0f0e0",
+            "positive_color": "#2d5016",
+            "negative_color": "#8b0000",
+            "tab_bg": "#d0e8d0",
+            "tab_selected": "#2d5016"
+        },
+        "Sunset Orange": {
+            "header_color": "#ff6b35",
+            "bg_color": "#fff5f0",
+            "text_color": "#8b4513",
+            "sidebar_bg": "#ffe8e0",
+            "card_bg": "#ffe8e0",
+            "positive_color": "#ff6b35",
+            "negative_color": "#cc3300",
+            "tab_bg": "#ffd6c0",
+            "tab_selected": "#ff6b35"
+        },
+        "Purple Night": {
+            "header_color": "#9c27b0",
+            "bg_color": "#f3e5f5",
+            "text_color": "#4a148c",
+            "sidebar_bg": "#e8d4f0",
+            "card_bg": "#e8d4f0",
+            "positive_color": "#9c27b0",
+            "negative_color": "#d32f2f",
+            "tab_bg": "#d8b8e8",
+            "tab_selected": "#9c27b0"
+        }
+    }
+    
+    colors = themes.get(theme, themes["Light"])
+    
+    return f"""
+    <style>
+        .main-header {{
+            font-size: 3rem;
+            font-weight: bold;
+            color: {colors['header_color']};
+            text-align: center;
+            margin-bottom: 2rem;
+        }}
+        .metric-card {{
+            background-color: {colors['card_bg']};
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border-left: 4px solid {colors['header_color']};
+            color: {colors['text_color']};
+        }}
+        .positive-change {{
+            color: {colors['positive_color']};
+            font-weight: bold;
+        }}
+        .negative-change {{
+            color: {colors['negative_color']};
+            font-weight: bold;
+        }}
+        .stApp {{
+            background-color: {colors['bg_color']};
+            color: {colors['text_color']};
+        }}
+        .stSidebar {{
+            background-color: {colors['sidebar_bg']};
+            color: {colors['text_color']};
+        }}
+        .stTabs [data-baseweb="tab-list"] {{
+            background-color: {colors['sidebar_bg']};
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            background-color: {colors['tab_bg']};
+            color: {colors['text_color']};
+        }}
+        .stTabs [aria-selected="true"] {{
+            background-color: {colors['tab_selected']};
+            color: white;
+        }}
+    </style>
+    """
+
+# Apply theme CSS
+st.markdown(get_theme_css(theme_mode), unsafe_allow_html=True)
 
 # Header
 st.markdown('<h1 class="main-header">📈 Real-Time Stock Market Dashboard</h1>', unsafe_allow_html=True)
@@ -478,14 +636,23 @@ def create_stock_chart(df, symbol, stock_info):
     fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
     fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
     
-    # Update layout
+    # Update layout with theme-specific template
     company_name = popular_stocks.get(symbol, symbol)
+    
+    # Choose template based on theme
+    if theme_mode == "Dark":
+        template = "plotly_dark"
+    elif theme_mode in ["Ocean Blue", "Forest Green", "Sunset Orange", "Purple Night"]:
+        template = "plotly_white"  # Light templates for better readability
+    else:
+        template = "plotly_white"
+    
     fig.update_layout(
         title=f"{symbol} - {company_name}",
         xaxis_rangeslider_visible=False,
         height=800,
         showlegend=True,
-        template="plotly_white"
+        template=template
     )
     
     return fig
@@ -632,11 +799,19 @@ if selected_stocks:
                         )
                     )
                 
+                # Choose template based on theme
+                if theme_mode == "Dark":
+                    template = "plotly_dark"
+                elif theme_mode in ["Ocean Blue", "Forest Green", "Sunset Orange", "Purple Night"]:
+                    template = "plotly_white"
+                else:
+                    template = "plotly_white"
+                
                 fig_performance.update_layout(
                     title="Portfolio Performance Comparison (Normalized to 100)",
                     xaxis_title="Date",
                     yaxis_title="Performance (%)",
-                    template="plotly_white"
+                    template=template
                 )
                 
                 st.plotly_chart(fig_performance, use_container_width=True)
