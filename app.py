@@ -46,6 +46,10 @@ st.markdown("""
 # Header
 st.markdown('<h1 class="main-header">📈 Real-Time Stock Market Dashboard</h1>', unsafe_allow_html=True)
 
+# API Notice
+if not use_sample_data:
+    st.warning("⚠️ **API Notice**: Yahoo Finance API is currently experiencing issues. For the best experience, enable 'Use Sample Data' in the sidebar.")
+
 # Sidebar for stock selection
 st.sidebar.header("📊 Stock Selection")
 st.sidebar.markdown("---")
@@ -90,9 +94,11 @@ time_period = st.sidebar.selectbox(
 auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (30s)", value=True)
 
 # Sample data toggle for testing
-use_sample_data = st.sidebar.checkbox("🧪 Use Sample Data (for testing)", value=False)
+use_sample_data = st.sidebar.checkbox("🧪 Use Sample Data (recommended)", value=True)
 if use_sample_data:
-    st.sidebar.info("📊 Using sample data for demonstration purposes")
+    st.sidebar.success("📊 Using sample data - all features will work!")
+else:
+    st.sidebar.warning("⚠️ Real data may not work due to API issues")
 
 # Rate limiting warning
 st.sidebar.markdown("---")
@@ -101,28 +107,43 @@ st.sidebar.warning("⚠️ **Rate Limiting Notice**\n\nTo avoid API limits, plea
 # Test API connection
 if st.sidebar.button("🔍 Test API Connection"):
     try:
-        # Test with multiple methods
-        test_stock = yf.Ticker("AAPL")
+        # Test with multiple methods and symbols
+        test_symbols = ["AAPL", "MSFT", "GOOGL"]
+        success = False
         
-        # Method 1: Date range
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=5)
-        test_data = test_stock.history(start=start_date, end=end_date)
+        for symbol in test_symbols:
+            try:
+                test_stock = yf.Ticker(symbol)
+                
+                # Try different methods
+                test_data = None
+                
+                # Method 1: Period
+                test_data = test_stock.history(period="1d")
+                
+                # Method 2: Date range if Method 1 fails
+                if test_data is None or test_data.empty:
+                    end_date = datetime.now()
+                    start_date = end_date - timedelta(days=1)
+                    test_data = test_stock.history(start=start_date, end=end_date)
+                
+                if test_data is not None and not test_data.empty:
+                    st.sidebar.success(f"✅ API connection working with {symbol}!")
+                    st.sidebar.info(f"Latest {symbol} price: ${test_data['Close'].iloc[-1]:.2f}")
+                    success = True
+                    break
+                    
+            except Exception as e:
+                continue
         
-        if test_data is not None and not test_data.empty:
-            st.sidebar.success("✅ API connection working!")
-            st.sidebar.info(f"Latest AAPL price: ${test_data['Close'].iloc[-1]:.2f}")
-        else:
-            # Method 2: Period
-            test_data = test_stock.history(period="5d")
-            if test_data is not None and not test_data.empty:
-                st.sidebar.success("✅ API connection working (period method)!")
-                st.sidebar.info(f"Latest AAPL price: ${test_data['Close'].iloc[-1]:.2f}")
-            else:
-                st.sidebar.error("❌ API connection failed - no data received")
+        if not success:
+            st.sidebar.error("❌ API connection failed - no data received")
+            st.sidebar.warning("🔧 This is a known issue with Yahoo Finance API")
+            st.sidebar.info("💡 Use 'Sample Data' mode for testing the dashboard")
+            
     except Exception as e:
         st.sidebar.error(f"❌ API connection failed: {str(e)}")
-        st.sidebar.info("💡 Try refreshing the page or check your internet connection")
+        st.sidebar.info("💡 Use 'Sample Data' mode for testing the dashboard")
 
 # Function to get stock symbol with proper exchange suffix
 def get_stock_symbol(symbol):
@@ -172,6 +193,7 @@ def test_stock_symbol(symbol):
 def create_sample_data(symbol):
     """Create sample data for testing when API fails"""
     import pandas as pd
+    import random
     from datetime import datetime, timedelta
     
     # Create sample data for the last 30 days
@@ -179,24 +201,58 @@ def create_sample_data(symbol):
     start_date = end_date - timedelta(days=30)
     dates = pd.date_range(start=start_date, end=end_date, freq='D')
     
-    # Generate sample price data
-    base_price = 150.0 if symbol == "AAPL" else 100.0
-    prices = []
-    for i in range(len(dates)):
-        # Add some random variation
-        import random
-        variation = random.uniform(-5, 5)
-        price = base_price + variation + (i * 0.1)  # Slight upward trend
-        prices.append(max(price, 1.0))  # Ensure price is positive
+    # Set seed for consistent data
+    random.seed(hash(symbol) % 1000)
     
-    # Create DataFrame
+    # Generate sample price data based on symbol
+    if symbol == "AAPL":
+        base_price = 150.0
+        trend = 0.2
+    elif symbol == "MSFT":
+        base_price = 300.0
+        trend = 0.3
+    elif symbol == "GOOGL":
+        base_price = 120.0
+        trend = 0.15
+    elif symbol == "TSLA":
+        base_price = 200.0
+        trend = -0.1
+    elif ".NS" in symbol:  # Indian stocks
+        base_price = 50.0
+        trend = 0.1
+    else:
+        base_price = 100.0
+        trend = 0.1
+    
+    prices = []
+    current_price = base_price
+    
+    for i in range(len(dates)):
+        # Add trend and random variation
+        daily_change = random.uniform(-3, 3) + trend
+        current_price = max(current_price + daily_change, 1.0)  # Ensure price is positive
+        prices.append(current_price)
+    
+    # Create DataFrame with realistic OHLC data
     data = {
-        'Open': [p - random.uniform(1, 3) for p in prices],
-        'High': [p + random.uniform(1, 3) for p in prices],
-        'Low': [p - random.uniform(1, 3) for p in prices],
+        'Open': [],
+        'High': [],
+        'Low': [],
         'Close': prices,
-        'Volume': [random.randint(1000000, 5000000) for _ in prices]
+        'Volume': []
     }
+    
+    for i, close_price in enumerate(prices):
+        # Generate realistic OHLC
+        daily_range = random.uniform(2, 8)
+        open_price = close_price + random.uniform(-daily_range/2, daily_range/2)
+        high_price = max(open_price, close_price) + random.uniform(0, daily_range/2)
+        low_price = min(open_price, close_price) - random.uniform(0, daily_range/2)
+        
+        data['Open'].append(open_price)
+        data['High'].append(high_price)
+        data['Low'].append(low_price)
+        data['Volume'].append(random.randint(1000000, 8000000))
     
     df = pd.DataFrame(data, index=dates)
     return df
@@ -210,7 +266,6 @@ def get_stock_data(symbol, period="1mo"):
     
     # Check if sample data is requested
     if use_sample_data:
-        st.info(f"📊 Using sample data for {symbol}")
         return create_sample_data(symbol), {}
     
     max_retries = 2  # Reduced retries
