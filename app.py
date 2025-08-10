@@ -63,7 +63,12 @@ popular_stocks = {
     "JPM": "JPMorgan Chase & Co.",
     "JNJ": "Johnson & Johnson",
     "WAAENERGIES.NS": "Waaree Energies Ltd. (India)",
-    "CRESTCHM.NS": "Crestchem Ltd. (India)"
+    "CRESTCHM.NS": "Crestchem Ltd. (India)",
+    "RELIANCE.NS": "Reliance Industries Ltd. (India)",
+    "TCS.NS": "Tata Consultancy Services Ltd. (India)",
+    "INFY.NS": "Infosys Ltd. (India)",
+    "HDFCBANK.NS": "HDFC Bank Ltd. (India)",
+    "ICICIBANK.NS": "ICICI Bank Ltd. (India)"
 }
 
 # Stock selection
@@ -95,6 +100,26 @@ def get_stock_symbol(symbol):
         # For US stocks, no suffix needed
         return symbol
 
+# Function to validate Indian stock symbols
+def validate_indian_stock(symbol):
+    """Validate and suggest corrections for Indian stock symbols"""
+    indian_stocks = {
+        "WAAENERGIES": "WAAENERGIES.NS",
+        "CRESTCHM": "CRESTCHM.NS",
+        "RELIANCE": "RELIANCE.NS",
+        "TCS": "TCS.NS",
+        "INFY": "INFY.NS",
+        "HDFCBANK": "HDFCBANK.NS",
+        "ICICIBANK": "ICICIBANK.NS",
+        "SBIN": "SBIN.NS",
+        "BHARTIARTL": "BHARTIARTL.NS",
+        "ITC": "ITC.NS"
+    }
+    
+    if symbol in indian_stocks:
+        return indian_stocks[symbol]
+    return symbol
+
 # Function to get stock data with improved error handling
 @st.cache_data(ttl=60)
 def get_stock_data(symbol, period="1mo"):
@@ -106,28 +131,29 @@ def get_stock_data(symbol, period="1mo"):
     
     for attempt in range(max_retries):
         try:
-            # Get proper symbol with exchange suffix
-            proper_symbol = get_stock_symbol(symbol)
+            # Validate and get proper symbol with exchange suffix
+            validated_symbol = validate_indian_stock(symbol)
+            proper_symbol = get_stock_symbol(validated_symbol)
             stock = yf.Ticker(proper_symbol)
             
             # Add a small delay to avoid rate limiting
-            time.sleep(0.5)
+            time.sleep(1.0)  # Increased delay for better reliability
             
-            # Fetch historical data with longer timeout for Indian stocks
-            if '.NS' in symbol or '.BO' in symbol:
-                hist = stock.history(period=period, progress=False, timeout=30)
-            else:
-                hist = stock.history(period=period, progress=False)
+            # Fetch historical data
+            hist = stock.history(period=period)
             
             # Add delay before fetching info
-            time.sleep(0.5)
+            time.sleep(1.0)
             
             # Fetch stock info
             info = stock.info
             
             # Validate data
             if hist is None or hist.empty:
-                st.warning(f"No data available for {symbol}. Please check the symbol.")
+                if '.NS' in symbol or '.BO' in symbol:
+                    st.warning(f"No data available for {symbol}. Indian markets might be closed or symbol may be incorrect.")
+                else:
+                    st.warning(f"No data available for {symbol}. Please check the symbol.")
                 return None, None
             
             return hist, info
