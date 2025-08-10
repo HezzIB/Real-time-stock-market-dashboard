@@ -6,7 +6,9 @@ from plotly.subplots import make_subplots
 import requests
 import time
 from datetime import datetime, timedelta
-import yfinance as yf
+import json
+from bs4 import BeautifulSoup
+import re
 
 # Page configuration
 st.set_page_config(
@@ -208,32 +210,34 @@ st.markdown('<h1 class="main-header">📈 Real-Time Stock Market Dashboard</h1>'
 st.sidebar.header("📊 Stock Selection")
 st.sidebar.markdown("---")
 
-# Popular stocks list
+# Popular Indian stocks list
 popular_stocks = {
-    "AAPL": "Apple Inc.",
-    "GOOGL": "Alphabet Inc.",
-    "MSFT": "Microsoft Corporation",
-    "AMZN": "Amazon.com Inc.",
-    "TSLA": "Tesla Inc.",
-    "FB": "Meta Platforms Inc. (Facebook)",
-    "NVDA": "NVIDIA Corporation",
-    "NFLX": "Netflix Inc.",
-    "JPM": "JPMorgan Chase & Co.",
-    "JNJ": "Johnson & Johnson",
-    "WAAENERGIES.NS": "Waaree Energies Ltd. (India)",
-    "CRESTCHM.NS": "Crestchem Ltd. (India)",
-    "RELIANCE.NS": "Reliance Industries Ltd. (India)",
-    "TCS.NS": "Tata Consultancy Services Ltd. (India)",
-    "INFY.NS": "Infosys Ltd. (India)",
-    "HDFCBANK.NS": "HDFC Bank Ltd. (India)",
-    "ICICIBANK.NS": "ICICI Bank Ltd. (India)"
+    "RELIANCE": "Reliance Industries Ltd. (NSE)",
+    "TCS": "Tata Consultancy Services Ltd. (NSE)",
+    "INFY": "Infosys Ltd. (NSE)",
+    "HDFCBANK": "HDFC Bank Ltd. (NSE)",
+    "ICICIBANK": "ICICI Bank Ltd. (NSE)",
+    "SBIN": "State Bank of India (NSE)",
+    "BHARTIARTL": "Bharti Airtel Ltd. (NSE)",
+    "ITC": "ITC Ltd. (NSE)",
+    "KOTAKBANK": "Kotak Mahindra Bank Ltd. (NSE)",
+    "AXISBANK": "Axis Bank Ltd. (NSE)",
+    "ASIANPAINT": "Asian Paints Ltd. (NSE)",
+    "MARUTI": "Maruti Suzuki India Ltd. (NSE)",
+    "WAAENERGIES": "Waaree Energies Ltd. (NSE)",
+    "CRESTCHM": "Crestchem Ltd. (NSE)",
+    "TATAMOTORS": "Tata Motors Ltd. (NSE)",
+    "HINDUNILVR": "Hindustan Unilever Ltd. (NSE)",
+    "SUNPHARMA": "Sun Pharmaceutical Industries Ltd. (NSE)",
+    "ULTRACEMCO": "UltraTech Cement Ltd. (NSE)",
+    "TITAN": "Titan Company Ltd. (NSE)"
 }
 
 # Stock selection
 selected_stocks = st.sidebar.multiselect(
-    "Select stocks to track:",
+    "Select Indian stocks to track:",
     options=list(popular_stocks.keys()),
-    default=["AAPL"],  # Start with just one stock to test
+    default=["RELIANCE"],  # Start with Reliance Industries
     format_func=lambda x: f"{x} - {popular_stocks[x]}"
 )
 
@@ -260,41 +264,29 @@ st.sidebar.markdown("---")
 st.sidebar.warning("⚠️ **Rate Limiting Notice**\n\nTo avoid API limits, please:\n• Select fewer stocks (max 3-4)\n• Use longer refresh intervals\n• Be patient with data loading")
 
 # Test API connection
-if st.sidebar.button("🔍 Test API Connection"):
+if st.sidebar.button("🔍 Test Indian Market APIs"):
     try:
-        # Test with multiple methods and symbols
-        test_symbols = ["AAPL", "MSFT", "GOOGL"]
-        success = False
+        # Test NSE API
+        test_symbol = "RELIANCE"
+        st.sidebar.info("🔄 Testing NSE API...")
         
-        for symbol in test_symbols:
-            try:
-                test_stock = yf.Ticker(symbol)
-                
-                # Try different methods
-                test_data = None
-                
-                # Method 1: Period
-                test_data = test_stock.history(period="1d")
-                
-                # Method 2: Date range if Method 1 fails
-                if test_data is None or test_data.empty:
-                    end_date = datetime.now()
-                    start_date = end_date - timedelta(days=1)
-                    test_data = test_stock.history(start=start_date, end=end_date)
-                
-                if test_data is not None and not test_data.empty:
-                    st.sidebar.success(f"✅ API connection working with {symbol}!")
-                    st.sidebar.info(f"Latest {symbol} price: ${test_data['Close'].iloc[-1]:.2f}")
-                    success = True
-                    break
-                    
-            except Exception as e:
-                continue
-        
-        if not success:
-            st.sidebar.error("❌ API connection failed - no data received")
-            st.sidebar.warning("🔧 This is a known issue with Yahoo Finance API")
-            st.sidebar.info("💡 Use 'Sample Data' mode for testing the dashboard")
+        nse_data, _ = get_nse_data(test_symbol, "5d")
+        if nse_data is not None and not nse_data.empty:
+            st.sidebar.success(f"✅ NSE API working with {test_symbol}!")
+            st.sidebar.info(f"Latest {test_symbol} price: ₹{nse_data['Close'].iloc[-1]:.2f}")
+        else:
+            st.sidebar.warning("⚠️ NSE API test failed")
+            
+        # Test BSE API
+        st.sidebar.info("🔄 Testing BSE API...")
+        bse_data, _ = get_bse_data(test_symbol, "5d")
+        if bse_data is not None and not bse_data.empty:
+            st.sidebar.success(f"✅ BSE API working with {test_symbol}!")
+            st.sidebar.info(f"Latest {test_symbol} price: ₹{bse_data['Close'].iloc[-1]:.2f}")
+        else:
+            st.sidebar.warning("⚠️ BSE API test failed")
+            
+        st.sidebar.info("💡 Use 'Sample Data' mode for testing if APIs fail")
             
     except Exception as e:
         st.sidebar.error(f"❌ API connection failed: {str(e)}")
@@ -359,24 +351,39 @@ def create_sample_data(symbol):
     # Set seed for consistent data
     random.seed(hash(symbol) % 1000)
     
-    # Generate sample price data based on symbol
-    if symbol == "AAPL":
-        base_price = 150.0
-        trend = 0.2
-    elif symbol == "MSFT":
-        base_price = 300.0
+    # Generate sample price data based on Indian stock symbols
+    if symbol == "RELIANCE":
+        base_price = 2500.0
         trend = 0.3
-    elif symbol == "GOOGL":
-        base_price = 120.0
+    elif symbol == "TCS":
+        base_price = 3500.0
+        trend = 0.2
+    elif symbol == "INFY":
+        base_price = 1500.0
         trend = 0.15
-    elif symbol == "TSLA":
-        base_price = 200.0
-        trend = -0.1
-    elif ".NS" in symbol:  # Indian stocks
-        base_price = 50.0
+    elif symbol == "HDFCBANK":
+        base_price = 1600.0
         trend = 0.1
+    elif symbol == "ICICIBANK":
+        base_price = 900.0
+        trend = 0.2
+    elif symbol == "SBIN":
+        base_price = 600.0
+        trend = 0.25
+    elif symbol == "BHARTIARTL":
+        base_price = 800.0
+        trend = 0.1
+    elif symbol == "ITC":
+        base_price = 400.0
+        trend = 0.05
+    elif symbol == "WAAENERGIES":
+        base_price = 1200.0
+        trend = 0.4
+    elif symbol == "CRESTCHM":
+        base_price = 80.0
+        trend = 0.15
     else:
-        base_price = 100.0
+        base_price = 500.0
         trend = 0.1
     
     prices = []
@@ -412,92 +419,124 @@ def create_sample_data(symbol):
     df = pd.DataFrame(data, index=dates)
     return df
 
+# Function to get NSE data
+def get_nse_data(symbol, period="1mo"):
+    """Fetch data from NSE using nsepy"""
+    try:
+        from nsepy import get_history
+        from datetime import date
+        
+        # Remove .NS suffix if present
+        clean_symbol = symbol.replace('.NS', '')
+        
+        # Calculate date range
+        end_date = date.today()
+        if period == "1d":
+            start_date = end_date
+        elif period == "5d":
+            start_date = end_date - timedelta(days=5)
+        elif period == "1mo":
+            start_date = end_date - timedelta(days=30)
+        elif period == "3mo":
+            start_date = end_date - timedelta(days=90)
+        else:
+            start_date = end_date - timedelta(days=30)
+        
+        # Fetch data from NSE
+        data = get_history(symbol=clean_symbol, start=start_date, end=end_date)
+        
+        if data is not None and not data.empty:
+            st.success(f"✅ NSE data fetched for {symbol}")
+            return data, {}
+        else:
+            return None, {}
+            
+    except Exception as e:
+        st.warning(f"NSE data fetch failed for {symbol}: {str(e)}")
+        return None, {}
+
+# Function to get BSE data
+def get_bse_data(symbol, period="1mo"):
+    """Fetch data from BSE using web scraping"""
+    try:
+        # Remove .BO suffix if present
+        clean_symbol = symbol.replace('.BO', '')
+        
+        # BSE URL for stock data
+        url = f"https://www.bseindia.com/stock-share-price/{clean_symbol}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Extract price data (this is a simplified version)
+            # In a real implementation, you'd need to parse the specific BSE page structure
+            
+            # For now, return None as BSE scraping requires more complex implementation
+            return None, {}
+        else:
+            return None, {}
+            
+    except Exception as e:
+        st.warning(f"BSE data fetch failed for {symbol}: {str(e)}")
+        return None, {}
+
+# Function to get TradingView data (simplified)
+def get_tradingview_data(symbol, period="1mo"):
+    """Fetch data from TradingView (simplified implementation)"""
+    try:
+        # TradingView API requires authentication and is complex
+        # This is a placeholder for future implementation
+        
+        # For now, return None
+        return None, {}
+        
+    except Exception as e:
+        st.warning(f"TradingView data fetch failed for {symbol}: {str(e)}")
+        return None, {}
+
+# Function to get data from multiple sources
+def get_multi_source_data(symbol, period="1mo"):
+    """Try multiple data sources in order of preference"""
+    
+    # For Indian stocks, try NSE first, then BSE
+    sources = [
+        ("NSE", lambda: get_nse_data(symbol, period)),
+        ("BSE", lambda: get_bse_data(symbol, period))
+    ]
+    
+    for source_name, source_func in sources:
+        try:
+            st.info(f"🔄 Trying {source_name} for {symbol}...")
+            data, info = source_func()
+            
+            if data is not None and not data.empty:
+                st.success(f"✅ Data fetched from {source_name} for {symbol}")
+                return data, info
+                
+        except Exception as e:
+            st.warning(f"❌ {source_name} failed for {symbol}: {str(e)}")
+            continue
+    
+    st.error(f"❌ All data sources failed for {symbol}")
+    return None, {}
+
 # Function to get stock data with improved error handling
 @st.cache_data(ttl=300)  # Increased cache time to reduce API calls
 def get_stock_data(symbol, period="1mo"):
-    """Fetch stock data using yfinance with retry logic and rate limiting"""
-    import time
-    from datetime import datetime, timedelta
+    """Fetch stock data from Indian market sources"""
     
     # Check if sample data is requested
     if use_sample_data:
         return create_sample_data(symbol), {}
     
-    max_retries = 2  # Reduced retries
-    retry_delay = 5  # Increased delay
-    
-    for attempt in range(max_retries):
-        try:
-            # Validate and get proper symbol with exchange suffix
-            validated_symbol = validate_indian_stock(symbol)
-            proper_symbol = get_stock_symbol(validated_symbol)
-            
-            # Create ticker object
-            stock = yf.Ticker(proper_symbol)
-            
-            # Add a delay to avoid rate limiting
-            time.sleep(2.0)
-            
-            # Try different approaches to get data
-            hist = None
-            
-            # Method 1: Try with start and end dates
-            try:
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=30)
-                hist = stock.history(start=start_date, end=end_date)
-                if hist is not None and not hist.empty:
-                    st.success(f"✅ Successfully fetched data for {symbol} using date range method")
-            except Exception as e:
-                st.warning(f"Date range method failed for {symbol}: {str(e)}")
-            
-            # Method 2: Try with period if Method 1 failed
-            if hist is None or hist.empty:
-                try:
-                    hist = stock.history(period="1mo")
-                    if hist is not None and not hist.empty:
-                        st.success(f"✅ Successfully fetched data for {symbol} using period method")
-                except Exception as e:
-                    st.warning(f"Period method failed for {symbol}: {str(e)}")
-            
-            # Method 3: Try with shorter period if Method 2 failed
-            if hist is None or hist.empty:
-                try:
-                    hist = stock.history(period="5d")
-                    if hist is not None and not hist.empty:
-                        st.success(f"✅ Successfully fetched data for {symbol} using 5-day method")
-                except Exception as e:
-                    st.warning(f"5-day method failed for {symbol}: {str(e)}")
-            
-            # Validate data
-            if hist is None or hist.empty:
-                if attempt < max_retries - 1:
-                    st.warning(f"Attempt {attempt + 1}: No data for {symbol}. Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                else:
-                    st.error(f"No data available for {symbol} after trying multiple methods.")
-                    st.info("💡 Try enabling 'Use Sample Data' for testing")
-                    return None, {}
-            
-            # Return data
-            return hist, {}
-            
-        except Exception as e:
-            if "429" in str(e):
-                st.warning(f"Rate limit hit for {symbol}. Waiting 20 seconds...")
-                time.sleep(20)
-            elif attempt < max_retries - 1:
-                st.warning(f"Attempt {attempt + 1} failed for {symbol}. Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                retry_delay *= 2
-            else:
-                st.error(f"Failed to fetch data for {symbol}: {str(e)}")
-                st.info("💡 Try enabling 'Use Sample Data' for testing")
-                return None, None
-    
-    return None, None
+    # Try to get data from multiple sources
+    return get_multi_source_data(symbol, period)
 
 # Function to calculate technical indicators
 def calculate_indicators(df):
@@ -830,12 +869,12 @@ if selected_stocks:
         # Market overview
         st.subheader("Market Overview")
         
-        # Get market indices
+        # Get Indian market indices
         market_indices = {
-            "^GSPC": "S&P 500",
-            "^DJI": "Dow Jones",
-            "^IXIC": "NASDAQ",
-            "^VIX": "VIX Volatility"
+            "^NSEI": "NIFTY 50",
+            "^BSESN": "SENSEX",
+            "^NSEBANK": "NIFTY BANK",
+            "^CNXIT": "NIFTY IT"
         }
         
         market_data = []
