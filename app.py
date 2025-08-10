@@ -100,30 +100,29 @@ st.sidebar.warning("⚠️ **Rate Limiting Notice**\n\nTo avoid API limits, plea
 
 # Test API connection
 if st.sidebar.button("🔍 Test API Connection"):
-    with st.sidebar.spinner("Testing connection..."):
-        try:
-            # Test with multiple methods
-            test_stock = yf.Ticker("AAPL")
-            
-            # Method 1: Date range
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=5)
-            test_data = test_stock.history(start=start_date, end=end_date)
-            
+    try:
+        # Test with multiple methods
+        test_stock = yf.Ticker("AAPL")
+        
+        # Method 1: Date range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=5)
+        test_data = test_stock.history(start=start_date, end=end_date)
+        
+        if test_data is not None and not test_data.empty:
+            st.sidebar.success("✅ API connection working!")
+            st.sidebar.info(f"Latest AAPL price: ${test_data['Close'].iloc[-1]:.2f}")
+        else:
+            # Method 2: Period
+            test_data = test_stock.history(period="5d")
             if test_data is not None and not test_data.empty:
-                st.sidebar.success("✅ API connection working!")
+                st.sidebar.success("✅ API connection working (period method)!")
                 st.sidebar.info(f"Latest AAPL price: ${test_data['Close'].iloc[-1]:.2f}")
             else:
-                # Method 2: Period
-                test_data = test_stock.history(period="5d")
-                if test_data is not None and not test_data.empty:
-                    st.sidebar.success("✅ API connection working (period method)!")
-                    st.sidebar.info(f"Latest AAPL price: ${test_data['Close'].iloc[-1]:.2f}")
-                else:
-                    st.sidebar.error("❌ API connection failed - no data received")
-        except Exception as e:
-            st.sidebar.error(f"❌ API connection failed: {str(e)}")
-            st.sidebar.info("💡 Try refreshing the page or check your internet connection")
+                st.sidebar.error("❌ API connection failed - no data received")
+    except Exception as e:
+        st.sidebar.error(f"❌ API connection failed: {str(e)}")
+        st.sidebar.info("💡 Try refreshing the page or check your internet connection")
 
 # Function to get stock symbol with proper exchange suffix
 def get_stock_symbol(symbol):
@@ -489,10 +488,6 @@ def create_metrics_cards(stock_data, stock_info, symbol):
 
 # Main dashboard
 if selected_stocks:
-    # Show loading status
-    with st.spinner("🔄 Fetching real-time stock data..."):
-        pass
-    
     # Create tabs for different views
     tab1, tab2, tab3 = st.tabs(["📊 Stock Charts", "📈 Portfolio Overview", "📋 Market Summary"])
     
