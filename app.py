@@ -57,7 +57,7 @@ popular_stocks = {
     "MSFT": "Microsoft Corporation",
     "AMZN": "Amazon.com Inc.",
     "TSLA": "Tesla Inc.",
-    "META": "Meta Platforms Inc.",
+    "FB": "Meta Platforms Inc. (Facebook)",
     "NVDA": "NVIDIA Corporation",
     "NFLX": "Netflix Inc.",
     "JPM": "JPMorgan Chase & Co.",
@@ -75,7 +75,7 @@ popular_stocks = {
 selected_stocks = st.sidebar.multiselect(
     "Select stocks to track:",
     options=list(popular_stocks.keys()),
-    default=["AAPL", "MSFT"],  # Reduced default selection to avoid rate limiting
+    default=["AAPL"],  # Start with just one stock to test
     format_func=lambda x: f"{x} - {popular_stocks[x]}"
 )
 
@@ -92,6 +92,19 @@ auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (30s)", value=True)
 # Rate limiting warning
 st.sidebar.markdown("---")
 st.sidebar.warning("⚠️ **Rate Limiting Notice**\n\nTo avoid API limits, please:\n• Select fewer stocks (max 3-4)\n• Use longer refresh intervals\n• Be patient with data loading")
+
+# Test API connection
+if st.sidebar.button("🔍 Test API Connection"):
+    with st.sidebar.spinner("Testing connection..."):
+        try:
+            test_stock = yf.Ticker("AAPL")
+            test_data = test_stock.history(period="1d")
+            if test_data is not None and not test_data.empty:
+                st.sidebar.success("✅ API connection working!")
+            else:
+                st.sidebar.error("❌ API connection failed - no data received")
+        except Exception as e:
+            st.sidebar.error(f"❌ API connection failed: {str(e)}")
 
 # Function to get stock symbol with proper exchange suffix
 def get_stock_symbol(symbol):
@@ -124,49 +137,76 @@ def validate_indian_stock(symbol):
         return indian_stocks[symbol]
     return symbol
 
+# Function to test stock symbol availability
+def test_stock_symbol(symbol):
+    """Test if a stock symbol is available and return suggestions"""
+    try:
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period="1d")
+        if hist is not None and not hist.empty:
+            return True, "Symbol is valid"
+        else:
+            return False, "No data available for this symbol"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
 # Function to get stock data with improved error handling
-@st.cache_data(ttl=120)  # Increased cache time to reduce API calls
+@st.cache_data(ttl=300)  # Increased cache time to reduce API calls
 def get_stock_data(symbol, period="1mo"):
     """Fetch stock data using yfinance with retry logic and rate limiting"""
     import time
     
-    max_retries = 2  # Reduced retries to avoid rate limiting
-    retry_delay = 5  # Increased initial delay
+    max_retries = 3  # Increased retries
+    retry_delay = 3  # Reduced initial delay
     
     for attempt in range(max_retries):
         try:
             # Validate and get proper symbol with exchange suffix
             validated_symbol = validate_indian_stock(symbol)
             proper_symbol = get_stock_symbol(validated_symbol)
+            
+            # Create ticker object
             stock = yf.Ticker(proper_symbol)
             
-            # Add a longer delay to avoid rate limiting
-            time.sleep(2.0)  # Increased delay for better reliability
+            # Add a small delay to avoid rate limiting
+            time.sleep(1.0)
             
-            # Fetch historical data only (skip info to reduce API calls)
-            hist = stock.history(period=period)
+            # Try different periods if the requested period fails
+            periods_to_try = [period, "5d", "1mo", "3mo"]
+            
+            hist = None
+            for try_period in periods_to_try:
+                try:
+                    hist = stock.history(period=try_period)
+                    if hist is not None and not hist.empty:
+                        break
+                except:
+                    continue
             
             # Validate data
             if hist is None or hist.empty:
-                if '.NS' in symbol or '.BO' in symbol:
-                    st.warning(f"No data available for {symbol}. Indian markets might be closed or symbol may be incorrect.")
+                if attempt < max_retries - 1:
+                    st.warning(f"Attempt {attempt + 1}: No data for {symbol}. Retrying...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
                 else:
-                    st.warning(f"No data available for {symbol}. Please check the symbol.")
-                return hist, {}
+                    st.error(f"No data available for {symbol} after trying multiple periods.")
+                    return None, {}
             
-            # Return minimal info to reduce API calls
+            # Return data
             return hist, {}
             
         except Exception as e:
             if "429" in str(e):
-                st.warning(f"Rate limit hit for {symbol}. Waiting longer before retry...")
-                time.sleep(10)  # Wait 10 seconds for rate limit
+                st.warning(f"Rate limit hit for {symbol}. Waiting 15 seconds...")
+                time.sleep(15)
             elif attempt < max_retries - 1:
                 st.warning(f"Attempt {attempt + 1} failed for {symbol}. Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
+                retry_delay *= 2
             else:
-                st.error(f"Failed to fetch data for {symbol} after {max_retries} attempts: {str(e)}")
+                st.error(f"Failed to fetch data for {symbol}: {str(e)}")
                 return None, None
     
     return None, None
